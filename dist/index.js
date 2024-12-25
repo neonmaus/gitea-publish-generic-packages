@@ -42117,7 +42117,7 @@ class PackagesServiceEx extends dist/* PackageService */.Y0 {
           );
           await this.baseHttpRequest.request({
             method: "DELETE",
-            url: "/packages/{owner}/generic/{package_name}/{package_version}",
+            url: "/packages/{owner}/generic/{package_name}/{package_version}/{filename}",
             path: {
               owner: owner,
               package_name: packageName,
