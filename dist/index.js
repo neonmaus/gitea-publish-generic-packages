@@ -42117,11 +42117,12 @@ class PackagesServiceEx extends dist/* PackageService */.Y0 {
           );
           await this.baseHttpRequest.request({
             method: "DELETE",
-            url: "/packages/{owner}/generic/{package_name}/{package_version}/{filename}",
+            url: "/packages/{owner}/generic/{name}/{version}/{filename}",
             path: {
               owner: owner,
-              package_name: packageName,
-              package_version: packageVersion,
+              name: packageName,
+              version: packageVersion,
+              filename: fileName,
             },
             errors: {
               404: `The package was not found.`,
