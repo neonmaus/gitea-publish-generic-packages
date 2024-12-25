@@ -25,8 +25,12 @@ inputs:
   token:
     description: "The Gitea personal access token"
     required: true
+  overwrite:
+    description: "Overwrite packages if they already exist"
+    default: "false"
+    required: false
 runs:
-  using: "node16"
+  using: "node20"
   main: "dist/index.js"
 branding:
   color: "green"

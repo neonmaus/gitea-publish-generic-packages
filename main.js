@@ -5,7 +5,7 @@ import * as glob from "glob";
 import core from "@actions/core";
 
 import gitea from "gitea-api";
-import path from 'path';
+import path from "path";
 
 /**
  * Extends packages service, adding publish generic packages api method support
@@ -41,16 +41,16 @@ class PackagesServiceEx extends gitea.PackageService {
    * @param {string} owner The owner of the package.
    * @param {string} packageName The package name. It can contain only lowercase letters (a-z), uppercase letter (A-Z), numbers (0-9), dots (.), hyphens (-), pluses (+), or underscores (_).
    * @param {string} packageVersion The package version, a non-empty string without trailing or leading whitespaces.
-   * @return {gitea.CancelablePromise<Array<gitea.PackageFile>>} 
+   * @return {gitea.CancelablePromise<Array<gitea.PackageFile>>}
    * @memberof PackagesServiceEx
    */
   async trylistGenericPackageFiles(owner, packageName, packageVersion) {
     try {
       const response = await this.listPackageFiles({
         owner: owner,
-        type: 'generic',
+        type: "generic",
         name: packageName,
-        version: packageVersion
+        version: packageVersion,
       });
       return response;
     } catch (error) {
@@ -66,51 +66,94 @@ class PackagesServiceEx extends gitea.PackageService {
    * @param {string} packageName The package name. It can contain only lowercase letters (a-z), uppercase letter (A-Z), numbers (0-9), dots (.), hyphens (-), pluses (+), or underscores (_).
    * @param {string} packageVersion The package version, a non-empty string without trailing or leading whitespaces.
    * @param {Array<string>} zip_files The zip package files.
+   * @param {boolean} overwrite Whether to overwrite existing files.
    * @returns {gitea.CancelablePromise<void>}
    * @throws {gitea.ApiError}
    * @memberof PackagesServiceEx
    */
-  async publishGenericPackages(owner, packageName, packageVersion, zip_files) {
-    core.debug(`Uploading these generic packages: ${zip_files.join(', ')}`);
+  async publishGenericPackages(
+    owner,
+    packageName,
+    packageVersion,
+    zip_files,
+    overwrite
+  ) {
+    core.debug(`Uploading these generic packages: ${zip_files.join(", ")}`);
 
-    const genericPackages = await this.trylistGenericPackageFiles(owner, packageName, packageVersion);
+    const genericPackages = await this.trylistGenericPackageFiles(
+      owner,
+      packageName,
+      packageVersion
+    );
     if (!Array.isArray(genericPackages) || genericPackages.length === 0) {
-      core.debug(`The version [${packageVersion}] does not have any generic packages, uploading...`);
+      core.debug(
+        `The version [${packageVersion}] does not have any generic packages, uploading...`
+      );
     } else {
-      core.debug(`The version [${packageVersion}] already has these generic packages: ${genericPackages.map((genericPackage) => genericPackage.name).join(', ')}`);
+      core.debug(
+        `The version [${packageVersion}] already has these generic packages: ${genericPackages
+          .map((genericPackage) => genericPackage.name)
+          .join(", ")}`
+      );
     }
 
     for (const filepath of zip_files) {
       const fileName = path.basename(filepath);
 
       // Check if the file exists. If exists, skip.
-      const isExists = Array.isArray(genericPackages) && genericPackages.length > 0 && genericPackages.some((genericPackage) => {
-        return genericPackage.name === fileName;
-      });
+      const isExists =
+        Array.isArray(genericPackages) &&
+        genericPackages.length > 0 &&
+        genericPackages.some((genericPackage) => {
+          return genericPackage.name === fileName;
+        });
       if (isExists) {
-        core.warning(`Generic package [${fileName}] already exists, skip.`);
-        continue;
+        if (overwrite) {
+          core.warning(
+            `Generic package [${fileName}] already exists, overwriting...`
+          );
+          await this.baseHttpRequest.request({
+            method: "DELETE",
+            url: "/packages/{owner}/generic/{package_name}/{package_version}",
+            path: {
+              owner: owner,
+              package_name: packageName,
+              package_version: packageVersion,
+            },
+            errors: {
+              404: `The package was not found.`,
+            },
+          });
+          core.debug(
+            `Successfully deleted existing generic package ${fileName}`
+          );
+        } else {
+          core.warning(`Generic package [${fileName}] already exists, skip.`);
+          continue;
+        }
       } else {
-        core.debug(`Generic package [${fileName}] does not exist, uploading...`);
+        core.debug(
+          `Generic package [${fileName}] does not exist, uploading...`
+        );
       }
 
       // Upload the file.
       const content = fs.readFileSync(filepath);
       const blob = new Blob([content]);
       await this.baseHttpRequest.request({
-        method: 'PUT',
-        url: '/packages/{owner}/generic/{name}/{version}/{filename}',
+        method: "PUT",
+        url: "/packages/{owner}/generic/{name}/{version}/{filename}",
         path: {
-          'owner': owner,
-          'name': packageName,
-          'version': packageVersion,
-          'filename': fileName
+          owner: owner,
+          name: packageName,
+          version: packageVersion,
+          filename: fileName,
         },
         body: blob,
         errors: {
           400: `The package name and/or version and/or file name are invalid.`,
-          409: `A file with the same name exist already in the package.`
-        }
+          409: `A file with the same name exist already in the package.`,
+        },
       });
       core.debug(`Successfully uploaded generic package ${filepath}`);
     }
@@ -125,6 +168,7 @@ async function run() {
     const package_version = core.getInput("package_version");
     const files = core.getInput("files");
     const token = core.getInput("token");
+    const overwrite = core.getBooleanInput("overwrite");
 
     // if api_url is empty or null or undefined.
     if (!api_url) {
@@ -163,7 +207,7 @@ async function run() {
     }
 
     // Get all files using file patterns.
-    const file_patterns = files.split('\n')
+    const file_patterns = files.split("\n");
     const all_files = paths(file_patterns);
     if (all_files.length == 0) {
       core.setFailed(`${file_patterns} not include valid file.`);
@@ -171,30 +215,44 @@ async function run() {
     }
 
     // The publish package method is an api that is not publicly available in api/v1
-    const baseApiUrl = api_url.indexOf('/v1') > 0 ? api_url.slice(0, api_url.indexOf('/v1')) : api_url;
+    const baseApiUrl =
+      api_url.indexOf("/v1") > 0
+        ? api_url.slice(0, api_url.indexOf("/v1"))
+        : api_url;
     const internal_gitea_client = new gitea.GiteaApi({
       BASE: baseApiUrl,
       WITH_CREDENTIALS: true,
-      TOKEN: token
+      TOKEN: token,
     });
 
     const gitea_client = new gitea.GiteaApi({
       BASE: api_url,
       WITH_CREDENTIALS: true,
-      TOKEN: token
+      TOKEN: token,
     });
 
-    const packagesService = new PackagesServiceEx(gitea_client.request, internal_gitea_client.request);
-    await packagesService.publishGenericPackages(owner, package_name, package_version, all_files);
-    core.info(`🎉 Successfully uploaded generic packages: ${all_files.join(', ')}`);
+    const packagesService = new PackagesServiceEx(
+      gitea_client.request,
+      internal_gitea_client.request
+    );
+    await packagesService.publishGenericPackages(
+      owner,
+      package_name,
+      package_version,
+      all_files,
+      overwrite
+    );
+    core.info(
+      `🎉 Successfully uploaded generic packages: ${all_files.join(", ")}`
+    );
   } catch (error) {
     core.setFailed(error);
   }
 }
 
 /**
- * 
- * @param {Array<String>} patterns 
+ *
+ * @param {Array<String>} patterns
  * @returns {Array<String>}
  */
 function paths(patterns) {
@@ -203,6 +261,6 @@ function paths(patterns) {
       glob.sync(pattern).filter((path) => fs.statSync(path).isFile())
     );
   }, []);
-};
+}
 
 run();

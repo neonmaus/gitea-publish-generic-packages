@@ -14,11 +14,12 @@ The following are optional as `step.with` keys
 |  `package_version`| String  | True     | Gives a generic package version. Defaults to `github.ref_name`                              |
 |  `files`          | String  | false    | Newline-delimited list of path globs for generic package files to upload                    |
 |  `token`          | String  | false    | The Gitea personal access token                                                             |
+|  `overwrite`      | boolean | True     | Overwrite packages if they already exist                                                    |
 
 ## Example usage
 
 ```yaml
-uses: VAllens/gitea-publish-generic-packages@v1
+uses: neonmaus/gitea-publish-generic-packages@v1
 env:
   NODE_OPTIONS: '--experimental-fetch' # if nodejs < 18
 with:
